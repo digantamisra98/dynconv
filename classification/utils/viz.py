@@ -13,16 +13,18 @@ def plot_image(input):
     plt.figure('Image')
     im = unnormalize(input[0]).cpu().numpy().transpose(1,2,0)
     plt.imshow(im)
+    return plt.gcf()
 
 
 def plot_ponder_cost(masks):
     ''' plots ponder cost
     argument masks is a list with masks as returned by the network '''
     assert isinstance(masks, list)
-    plt.figure('Ponder Cost')
+    fig = plt.figure('Ponder Cost')
     ponder_cost = dynconv.ponder_cost_map(masks)
     plt.imshow(ponder_cost, vmin=0, vmax=len(masks))
     plt.colorbar()
+    return plt.gcf()
 
 def plot_masks(masks):
     ''' plots individual masks as subplots 
@@ -46,6 +48,8 @@ def plot_masks(masks):
         x = j % WIDTH
         y = j // WIDTH
         f.delaxes(axarr[y,x])
+        
+    return f
 
 def showKey():
     ''' 

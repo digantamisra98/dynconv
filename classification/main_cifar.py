@@ -1,5 +1,6 @@
 import argparse
 import os.path
+import wandb
 
 import matplotlib.pyplot as plt
 
@@ -31,6 +32,7 @@ def main():
     parser.add_argument('--batchsize', default=256, type=int, help='batch size')
     parser.add_argument('--epochs', default=350, type=int, help='number of epochs')
     parser.add_argument('--model', type=str, default='resnet32', help='network model name')
+    parser.add_argument('--name', type=str, default='resnet32', help='W&B run name')
 
 
     # parser.add_argument('--resnet_n', default=5, type=int, help='number of layers per resnet stage (5 for Resnet-32)')
@@ -44,6 +46,9 @@ def main():
     parser.add_argument('--pretrained', action='store_true', help='initialize with pretrained model')
     args =  parser.parse_args()
     print('Args:', args)
+    
+    
+    wandb.init(project='DynConv', name = args.name, config=args, save_code=True)
 
 
     mean, std = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
@@ -70,6 +75,8 @@ def main():
     ## MODEL
     net_module = models.__dict__[args.model]
     model = net_module(sparse=args.budget >= 0, pretrained=args.pretrained).to(device=device)
+    
+    wandb.watch(model)
 
     ## CRITERION
     class Loss(nn.Module):
@@ -129,6 +136,7 @@ def main():
             
     ## Count number of params
     print("* Number of trainable parameters:", utils.count_parameters(model))
+    wandb.config.update({'Parameters':utils.count_parameters(model)})
 
 
     ## EVALUATION
@@ -143,6 +151,7 @@ def main():
 
         # train for one epoch
         print('current lr {:.5e}'.format(optimizer.param_groups[0]['lr']))
+        wandb.log({'lr': optimizer.param_groups[0]['lr']})
         train(args, train_loader, model, criterion, optimizer, epoch)
         lr_scheduler.step()
 
@@ -217,14 +226,20 @@ def validate(args, val_loader, model, criterion, epoch):
             top1.update(prec1.item(), input.size(0))
 
             if args.plot_ponder:
-                viz.plot_image(input)
-                viz.plot_ponder_cost(meta['masks'])
-                viz.plot_masks(meta['masks'])
+                im = viz.plot_image(input)
+                pc = viz.plot_ponder_cost(meta['masks'])
+                pm = viz.plot_masks(meta['masks'])
+                wandb.log({"Media/Image": im, "Media/Ponder_Cost": pc, "Media/Masks": pm})
                 plt.show()
 
     print(f'* Epoch {epoch} - Prec@1 {top1.avg:.3f}')
     print(f'* average FLOPS (multiply-accumulates, MACs) per image:  {model.compute_average_flops_cost()[0]/1e6:.6f} MMac')
+    wandb.log({'Val/Flops_per_image':model.compute_average_flops_cost()[0]/1e6})
     model.stop_flops_count()
+    wandb.log({
+            'Val/Top-1 accuracy': top1.avg,
+            'Epoch': epoch,
+              })
     return top1.avg
 
 if __name__ == "__main__":
